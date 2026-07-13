@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MultiAlpha | 国新证券 AI 决策平台</title>
+<link rel="icon" href="App logo.jpg" type="image/jpeg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@600;700&family=JetBrains+Mono:wght@400;500&family=Roboto+Mono:wght@600;700&family=STIX+Two+Text:ital,wght@0,400;0,700;1,400;1,700&family=Crimson+Text:ital,wght@0,600;0,700;1,400;1,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ─── Topbar ─── -->
+<div class="topbar">
+  <div class="brand" onclick="goHome()" style="cursor:pointer;" title="返回首页">
+      <div class="brand-mark"><img src="App logo.jpg" alt="MultiAlpha"></div>
+    <div class="brand-text">
+      <div class="brand-company">国新证券</div>
+      <div class="brand-name">MultiAlpha</div>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <button class="btn btn-ghost btn-sm" onclick="fetchTraces()">刷新任务</button>
+    <button class="btn btn-primary btn-sm" onclick="openModal()">新建任务</button>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<!-- ─── Main Layout ─── -->
+<div class="main">
+
+  <!-- LEFT: Task List -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">任务列表</div>
+      <select class="filter-select" id="scenarioFilter" onchange="fetchTraces()">
+        <option value="">全部场景</option>
+        <option value="Finance Data Building">因子挖掘</option>
+        <option value="Finance Data Building (Reports)">研报因子提取</option>
+        <option value="Finance Whole Pipeline">量化全流程</option>
+        <option value="Finance Model Implementation">模型实现</option>
+        <option value="Data Science">数据科学</option>
+      </select>
+      <div class="chip-row">
+        <button class="chip active" data-filter="all" onclick="setChipFilter(this)">全部</button>
+        <button class="chip" data-filter="done" onclick="setChipFilter(this)">完成</button>
+        <button class="chip" data-filter="running" onclick="setChipFilter(this)">运行中</button>
+      </div>
+    </div>
+    <div class="task-list" id="taskList">
+      <div style="padding:24px; text-align:center; color:var(--muted); font-size:13px;">加载中...</div>
+    </div>
+  </div>
+
+  <!-- CENTER: Pipeline + Log -->
+  <div class="center" id="centerPanel">
+
+    <div class="center-header" id="centerHeader" style="display:none;">
+      <div>
+        <div class="center-title" id="traceTitle">—</div>
+        <div class="center-subtitle" id="traceMeta"></div>
+      </div>
+      <div class="center-right">
+        <span class="loop-pill" id="loopInfo" style="display:none;">Loop <span id="loopNum">0</span></span>
+        <span class="status-tag idle" id="traceStatus">—</span>
+        <button class="btn btn-sm" id="btnPause" onclick="controlTask('pause')" style="display:none;">暂停</button>
+        <button class="btn btn-sm" id="btnStop" onclick="controlTask('stop')" style="display:none;">停止</button>
+      </div>
+    </div>
+
+    <div class="pipeline" id="pipelineSection" style="display:none;">
+      <div class="pipeline-stages" id="pipelineStages"></div>
+    </div>
+
+    <!-- Task brief: shows the user's starting point (config + initial hypothesis + initial factors) -->
+    <div class="task-brief" id="taskBrief" style="display:none;">
+      <div class="task-brief-header" onclick="toggleTaskBrief()">
+        <div class="task-brief-eyebrow">
+          <span class="task-brief-mark">📌</span>
+          <span class="task-brief-label">任务起点</span>
+          <span class="task-brief-scenario" id="taskBriefScenario">—</span>
+        </div>
+        <div class="task-brief-toggle" id="taskBriefToggle">▾ 展开</div>
+      </div>
+      <div class="task-brief-body" id="taskBriefBody" style="display:none;">
+        <!-- Strategy description (most prominent) -->
+        <div class="task-brief-section task-brief-strategy">
+          <div class="task-brief-section-label">初始策略描述</div>
+          <div class="task-brief-strategy-text" id="taskBriefStrategy">—</div>
+          <div class="task-brief-strategy-reason" id="taskBriefReason"></div>
+        </div>
+        <!-- Config (chips) -->
+        <div class="task-brief-section">
+          <div class="task-brief-section-label">任务配置</div>
+          <div class="task-brief-config" id="taskBriefConfig">
+            <div class="task-brief-empty">无配置信息</div>
+          </div>
+        </div>
+        <!-- Initial factors (badges) -->
+        <div class="task-brief-section" id="taskBriefFactorsSection" style="display:none;">
+          <div class="task-brief-section-label">初始因子任务 <span class="task-brief-count" id="taskBriefFactorsCount">0</span></div>
+          <div class="task-brief-factors" id="taskBriefFactors"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="agent-flow" id="agentFlow" style="display:none;">
+      <div class="agent-flow-title">多智能体协作流程</div>
+      <div class="agent-flow-row" id="agentFlowRow"></div>
+    </div>
+
+    <div class="loop-bar" id="loopBar" style="display:none;"></div>
+
+    <!-- Token consumption dashboard -->
+    <div class="token-dash" id="tokenDash" style="display:none;"></div>
+
+    <!-- Center result area: factors + chart + code (primary) -->
+    <div class="center-result" id="centerResult" style="display:none;">
+      <div class="center-result-tabs" id="centerResultTabs"></div>
+      <div class="center-result-body" id="centerResultBody"></div>
+    </div>
+
+    <div class="empty" id="emptyCenter">
+      <!-- Floating task launcher (visible on landing only) -->
+      <button class="task-launcher" id="taskLauncher" onclick="showHistory()" title="打开任务列表">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+          <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+        </svg>
+        <span>任务</span>
+        <span class="task-launcher-count" id="taskLauncherCount">0</span>
+      </button>
+      <!-- Task drawer (for landing mode) -->
+      <div class="task-drawer-mask" id="taskDrawerMask" onclick="closeTaskDrawer()"></div>
+      <div class="task-drawer" id="taskDrawer">
+        <div class="task-drawer-header">
+          <span class="task-drawer-title">TASKS</span>
+          <button class="task-drawer-close" onclick="closeTaskDrawer()">×</button>
+        </div>
+        <div class="task-drawer-body" id="taskDrawerBody">
+          <div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;">加载中...</div>
+        </div>
+      </div>
+      <div class="landing">
+
+        <!-- ═══ Hero: Quant Terminal ═══ -->
+        <div class="terminal-hero">
+          <div class="terminal-frame">
+
+            <!-- Frame header -->
+            <div class="terminal-frame-head">
+              <div class="terminal-frame-dots">
+                <span class="dot dot-r"></span>
+                <span class="dot dot-y"></span>
+                <span class="dot dot-g"></span>
+              </div>
+              <div class="terminal-frame-title">MULTIALPHA · QUANT TERMINAL</div>
+              <div class="terminal-frame-meta">
+                <span class="frame-status"><span class="frame-status-dot"></span>LIVE</span>
+                <span class="frame-time" id="frameTime">--:--:--</span>
+              </div>
+            </div>
+
+            <!-- Hero content -->
+            <div class="terminal-hero-body">
+              <div class="hero-left">
+                <div class="hero-eyebrow">FACTOR MINING · Ⓥ · GUOXIN SECURITIES</div>
+                <h1 class="hero-display">
+                  <span class="hero-display-row">
+                    <span class="brand-wordmark">
+                      <span class="brand-letter">M</span><span class="brand-letter">u</span><span class="brand-letter">l</span><span class="brand-letter">t</span><span class="brand-letter">i</span><span class="alpha-glyph-svg" aria-label="alpha" title="α · Greek alpha"><span class="alpha-char">α</span></span><span class="brand-one">1</span><span class="brand-letter">p</span><span class="brand-letter">h</span><span class="brand-letter">a</span>
+                      <span class="brand-vbadge" title="V · K线V形反转">
+                        <svg viewBox="0 0 110 78" width="100%" height="100%" aria-hidden="true">
+                          <defs>
+                            <linearGradient id="vg" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stop-color="#FFF4D6"/>
+                              <stop offset="40%" stop-color="#F0D585"/>
+                              <stop offset="100%" stop-color="#B68B3F"/>
+                            </linearGradient>
+                            <filter id="vGlow" x="-50%" y="-50%" width="200%" height="200%">
+                              <feGaussianBlur stdDeviation="1.5" result="blur"/>
+                              <feMerge>
+                                <feMergeNode in="blur"/>
+                                <feMergeNode in="SourceGraphic"/>
+                              </feMerge>
+                            </filter>
+                          </defs>
+
+                          <!-- Outer frame -->
+                          <rect x="1.5" y="1.5" width="107" height="75" rx="5" fill="rgba(0,0,0,0.3)" stroke="rgba(201,169,97,0.2)" stroke-width="0.6"/>
+
+                          <!-- 6 K-line candles: left 2 green, doji, right 3 red. K6 highest -->
+                          <g>
+                            <!-- K1 GREEN -->
+                            <line x1="25" y1="26" x2="25" y2="46" stroke="#10B981" stroke-width="1"/>
+                            <rect x="22" y="30" width="6" height="12" fill="#10B981" stroke="#0E8C6B" stroke-width="0.4"/>
+                            <!-- K2 GREEN (下跌) -->
+                            <line x1="37" y1="36" x2="37" y2="56" stroke="#10B981" stroke-width="1"/>
+                            <rect x="34" y="40" width="6" height="12" fill="#10B981" stroke="#0E8C6B" stroke-width="0.4"/>
+                            <!-- K3 RED doji (V 底) -->
+                            <line x1="49" y1="48" x2="49" y2="64" stroke="#EF4444" stroke-width="1.2"/>
+                            <rect x="46" y="54" width="6" height="5" fill="#EF4444" stroke="#C73030" stroke-width="0.4"/>
+                            <!-- K4 RED (上涨) -->
+                            <line x1="61" y1="38" x2="61" y2="58" stroke="#EF4444" stroke-width="1"/>
+                            <rect x="58" y="40" width="6" height="14" fill="#EF4444" stroke="#C73030" stroke-width="0.4"/>
+                            <!-- K5 RED (继续上涨) -->
+                            <line x1="73" y1="30" x2="73" y2="50" stroke="#EF4444" stroke-width="1"/>
+                            <rect x="70" y="32" width="6" height="14" fill="#EF4444" stroke="#C73030" stroke-width="0.4"/>
+                            <!-- K6 RED (突破新高，全图最高点) -->
+                            <line x1="85" y1="20" x2="85" y2="44" stroke="#EF4444" stroke-width="1.1"/>
+                            <rect x="82" y="22" width="6" height="18" fill="#EF4444" stroke="#C73030" stroke-width="0.4"/>
+                          </g>
+
+                          <!-- Pivot dot at V bottom -->
+                          <circle cx="49" cy="60" r="2.5" fill="#F0D585" stroke="#1a1612" stroke-width="0.5"/>
+
+                          <!-- Golden V letter above K6, no overlap. K6 top=20, V bottom=18 -->
+                          <g filter="url(#vGlow)">
+                            <path d="M 80 4 L 85 18 L 90 4 L 88 4 L 85 12 L 82 4 Z"
+                                  fill="url(#vg)"
+                                  stroke="#B68B3F"
+                                  stroke-width="0.3"/>
+                          </g>
+                        </svg>
+                      </span>
+                    </span>
+                  </span>
+                  <span class="hero-display-sub">量化因子挖掘终端 · V.4</span>
+                </h1>
+                <p class="hero-lede">
+                  5 个智能体协作，10 轮自动迭代，把一句策略构想跑成可执行可回测的 α 因子。
+                </p>
+                <div class="hero-actions">
+                  <button class="btn btn-primary" onclick="openModal()">
+                    <span class="btn-key">N</span> 新建任务
+                  </button>
+                  <button class="btn btn-ghost" onclick="showHistory()">
+                    查看历史任务 →
+                  </button>
+                </div>
+              </div>
+
+              <div class="hero-right">
+                <!-- Ticker tape (signature element) -->
+                <div class="ticker-wrap">
+                  <div class="ticker-label">LIVE · ALL TASKS</div>
+                  <div class="ticker-tape">
+                    <div class="ticker-track" id="tickerTrack">
+                      <!-- Filled by JS with live trace data -->
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Live stat tiles -->
+                <div class="stat-grid">
+                  <div class="stat-tile">
+                    <div class="stat-k">AGENTS</div>
+                    <div class="stat-v">05</div>
+                    <div class="stat-d">假设 → 评审</div>
+                    <div class="stat-features">
+                      <span>假设生成</span><span>实验设计</span><span>代码实现</span><span>回测验证</span><span>反馈评审</span>
+                    </div>
+                  </div>
+                  <div class="stat-tile">
+                    <div class="stat-k">TASKS</div>
+                    <div class="stat-v" id="statTasks">--</div>
+                    <div class="stat-d" id="statTasksD">实时统计</div>
+                    <div class="stat-features">
+                      <span>因子挖掘</span><span>策略回测</span><span>自动迭代</span>
+                    </div>
+                  </div>
+                  <div class="stat-tile">
+                    <div class="stat-k">LOOPS / RUN</div>
+                    <div class="stat-v" id="statLoops">--</div>
+                    <div class="stat-d">最大循环数</div>
+                    <div class="stat-features">
+                      <span>假设驱动</span><span>自动评估</span><span>持续优化</span><span>逐步收敛</span>
+                    </div>
+                  </div>
+                  <div class="stat-tile">
+                    <div class="stat-k">UPTIME</div>
+                    <div class="stat-v" id="statUptime">--</div>
+                    <div class="stat-d">本任务最长</div>
+                    <div class="stat-features">
+                      <span>7×24 运行</span><span>无人值守</span><span>实时监控</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Body -->
+        <div class="landing-body">
+
+          <!-- Multi-Agent Showcase -->
+          <div class="landing-section-head">
+            <div class="v-divider"><span class="v-divider-mark">I</span><span class="v-divider-line"></span><span class="v-divider-label">ARCHITECTURE</span></div>
+            <div class="landing-section-title">多智能体协作架构</div>
+            <div class="landing-section-sub">五个专业智能体各司其职，模拟真实量化投研团队的 R&D 协作流程</div>
+          </div>
+
+          <div class="agent-showcase">
+            <div class="agent-card">
+              <div class="agent-avatar gold">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707M16 11a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+              </div>
+              <div class="agent-name">假设生成</div>
+              <div class="agent-role">研究员</div>
+              <div class="agent-desc">基于市场观察与历史反馈，提出因子假设与创新思路</div>
+            </div>
+            <div class="agent-arrow">→</div>
+            <div class="agent-card">
+              <div class="agent-avatar blue">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              </div>
+              <div class="agent-name">实验设计</div>
+              <div class="agent-role">设计师</div>
+              <div class="agent-desc">将抽象假设转化为具体因子任务，定义公式、变量与去重</div>
+            </div>
+            <div class="agent-arrow">→</div>
+            <div class="agent-card">
+              <div class="agent-avatar green">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
+              </div>
+              <div class="agent-name">代码实现</div>
+              <div class="agent-role">编码员</div>
+              <div class="agent-desc">CoSTEER 多轮演化生成 factor.py，自动调试修复错误</div>
+            </div>
+            <div class="agent-arrow">→</div>
+            <div class="agent-card">
+              <div class="agent-avatar indigo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg>
+              </div>
+              <div class="agent-name">回测执行</div>
+              <div class="agent-role">执行员</div>
+              <div class="agent-desc">Docker 隔离环境中运行 Qlib 回测，IC 去重并产出指标</div>
+            </div>
+            <div class="agent-arrow">→</div>
+            <div class="agent-card">
+              <div class="agent-avatar purple">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+              </div>
+              <div class="agent-name">反馈评审</div>
+              <div class="agent-role">评审员</div>
+              <div class="agent-desc">对比 SOTA 结果，评估因子有效性，指导下一轮迭代</div>
+            </div>
+          </div>
+
+          <!-- Iteration Flow -->
+          <div class="landing-section-head" style="margin-top:36px;">
+            <div class="v-divider"><span class="v-divider-mark">II</span><span class="v-divider-line"></span><span class="v-divider-label">ITERATION</span></div>
+            <div class="landing-section-title">多轮自动迭代</div>
+            <div class="landing-section-sub">每一轮反馈自动驱动下一轮优化，因子表现持续提升</div>
+          </div>
+
+          <div class="iter-flow">
+            <div class="iter-loop-line"></div>
+            <div class="iter-rounds">
+              <div class="iter-round">
+                <div class="iter-round-num">R1</div>
+                <div class="iter-round-bar">
+                  <div class="iter-bar-fill" style="width:35%;background:linear-gradient(90deg,var(--gold),var(--gold-dark));"></div>
+                </div>
+                <div class="iter-round-label">初始假设</div>
+              </div>
+              <div class="iter-round">
+                <div class="iter-round-num">R2</div>
+                <div class="iter-round-bar">
+                  <div class="iter-bar-fill" style="width:52%;background:linear-gradient(90deg,var(--gold),var(--gold-dark));"></div>
+                </div>
+                <div class="iter-round-label">代码优化</div>
+              </div>
+              <div class="iter-round">
+                <div class="iter-round-num">R3</div>
+                <div class="iter-round-bar">
+                  <div class="iter-bar-fill" style="width:70%;background:linear-gradient(90deg,var(--gold),var(--gold-dark));"></div>
+                </div>
+                <div class="iter-round-label">因子改进</div>
+              </div>
+              <div class="iter-round">
+                <div class="iter-round-num">R4</div>
+                <div class="iter-round-bar">
+                  <div class="iter-bar-fill" style="width:85%;background:linear-gradient(90deg,var(--gold),var(--gold-dark));"></div>
+                </div>
+                <div class="iter-round-label">效果提升</div>
+              </div>
+              <div class="iter-round">
+                <div class="iter-round-num">R5</div>
+                <div class="iter-round-bar">
+                  <div class="iter-bar-fill" style="width:95%;background:linear-gradient(90deg,var(--gold),var(--gold-dark));"></div>
+                </div>
+                <div class="iter-round-label">收敛稳定</div>
+              </div>
+            </div>
+            <div class="iter-cycle">
+              <svg viewBox="0 0 100 30" width="100%" height="30"><path d="M5,20 Q20,5 35,15 T65,10 T95,8" stroke="var(--gold-dark)" stroke-width="2" fill="none" stroke-dasharray="4,3"/><circle cx="5" cy="20" r="3" fill="var(--gold)"/><circle cx="35" cy="15" r="3" fill="var(--gold)"/><circle cx="65" cy="10" r="3" fill="var(--gold)"/><circle cx="95" cy="8" r="3" fill="var(--gold-dark)"/></svg>
+              <div class="iter-cycle-label">IC 指标逐轮提升</div>
+            </div>
+          </div>
+
+          <!-- Entry Points -->
+          <div class="landing-section-head">
+            <div class="v-divider"><span class="v-divider-mark">III</span><span class="v-divider-line"></span><span class="v-divider-label">ENTRY POINTS</span></div>
+            <div class="landing-section-title">任务入口</div>
+            <div class="landing-section-sub">选择输入方式，启动因子挖掘任务</div>
+          </div>
+
+          <div class="entry-grid">
+            <div class="entry-card" onclick="openModal('text')">
+              <span class="entry-badge live">可用</span>
+              <div class="entry-icon gold">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              </div>
+              <div class="entry-title">策略文字描述</div>
+              <div class="entry-desc">通过自然语言描述策略思路，系统自动生成量化因子并回测验证</div>
+            </div>
+            <div class="entry-card" onclick="openModal('pdf')">
+              <span class="entry-badge live">可用</span>
+              <div class="entry-icon blue">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+              </div>
+              <div class="entry-title">研报因子提取</div>
+              <div class="entry-desc">上传金工研报 PDF，自动提取因子公式、变量定义并生成可执行代码</div>
+            </div>
+            <div class="entry-card" onclick="openModal('optimize')">
+              <span class="entry-badge live">可用</span>
+              <div class="entry-icon green">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+              </div>
+              <div class="entry-title">因子迭代优化</div>
+              <div class="entry-desc">基于回测反馈持续优化已有因子，提升 IC、ICIR 等关键绩效指标</div>
+            </div>
+            <div class="entry-card coming">
+              <span class="entry-badge soon">即将上线</span>
+              <div class="entry-icon indigo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+              </div>
+              <div class="entry-title">K线图形分析</div>
+              <div class="entry-desc">上传 K 线图或技术分析图表，AI 识别图形形态并生成对应量化因子</div>
+            </div>
+            <div class="entry-card coming">
+              <span class="entry-badge soon">即将上线</span>
+              <div class="entry-icon slate">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2h-4"/><rect x="9" y="2" width="6" height="9" rx="1"/></svg>
+              </div>
+              <div class="entry-title">交割单分析</div>
+              <div class="entry-desc">上传交易记录 CSV/Excel，分析交易风格与弱点，生成针对性优化因子</div>
+            </div>
+            <div class="entry-card" onclick="showHistory()">
+              <div class="entry-icon gold" style="background:var(--surface-2);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 12l4-4 4 4 5-5"/></svg>
+              </div>
+              <div class="entry-title">历史任务</div>
+              <div class="entry-desc">查看已完成和进行中的因子挖掘任务，对比回测结果与迭代效果</div>
+            </div>
+          </div>
+
+          <!-- Trust Footer -->
+          <div class="landing-trust">
+            <div class="trust-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              <span>数据安全隔离</span>
+            </div>
+            <div class="trust-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+              <span>容器化执行</span>
+            </div>
+            <div class="trust-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              <span>全流程自动化</span>
+            </div>
+            <div class="trust-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+              <span>多智能体协作</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Results -->
+  <div class="results" id="resultsPanel" style="display:none;">
+    <div class="results-header">
+      <div class="results-title">因子结果</div>
+      <span class="results-count" id="resultsCount">0</span>
+    </div>
+    <div class="results-body" id="resultsBody"></div>
+  </div>
+</div>
+
+<!-- Log drawer (bottom, IDE console style) -->
+<div class="log-float collapsed" id="logSection" style="display:none;">
+  <div class="log-float-header" onclick="toggleLog()">
+    <div class="log-label">
+      <span class="log-dot" id="logDot"></span>
+      <span>运行日志</span>
+      <span class="log-stats" id="logStats" style="color:var(--muted);font-size:11px;margin-left:8px;">0 行</span>
+    </div>
+    <div class="log-controls">
+      <input type="text" placeholder="搜索日志..." id="logFilter" oninput="filterLogs()" onclick="event.stopPropagation()">
+      <label onclick="event.stopPropagation()"><input type="checkbox" id="hideInfo" onchange="filterLogs()"> 隐藏 INFO</label>
+      <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation(); scrollLogBottom()">最新</button>
+      <button class="btn btn-sm btn-ghost" id="btnToggleLog" onclick="event.stopPropagation(); toggleLog()" title="收起/展开日志">⬆ 展开</button>
+    </div>
+  </div>
+  <div class="log-float-body" id="logPanel"></div>
+</div>
+
+<!-- ─── New Task Modal ─── -->
+<div class="modal-overlay" id="taskModal">
+  <div class="modal">
+    <div class="modal-header">
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+      <div class="modal-title">新建因子挖掘任务</div>
+    </div>
+    <div class="modal-body">
+
+      <div class="method-tabs" id="methodTabs">
+        <button class="method-tab active" data-method="text" onclick="switchMethod('text')">文字描述</button>
+        <button class="method-tab" data-method="pdf" onclick="switchMethod('pdf')">研报上传</button>
+        <button class="method-tab" data-method="optimize" onclick="switchMethod('optimize')">因子优化</button>
+        <button class="method-tab disabled" data-method="image" onclick="switchMethod('image')">K线图片</button>
+        <button class="method-tab disabled" data-method="trade" onclick="switchMethod('trade')">交割单分析</button>
+      </div>
+
+      <!-- Method: Text -->
+      <div class="method-content" id="method-text">
+        <div class="field">
+          <label class="field-label">策略描述</label>
+          <div class="field-hint">用自然语言描述你的策略思路，AI 将自动生成量化因子</div>
+          <textarea class="field-input" id="textDesc" placeholder="例如：基于成交量变化的动量因子，当成交量突然放大时产生买入信号..."></textarea>
+        </div>
+        <div class="field">
+          <label class="field-label">挖掘场景</label>
+          <select class="field-input" id="textScenario">
+            <option value="Finance Data Building">因子挖掘 (fin_factor)</option>
+            <option value="Finance Whole Pipeline">量化全流程 (fin_quant)</option>
+            <option value="Finance Model Implementation">模型实现 (fin_model)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Method: PDF -->
+      <div class="method-content" id="method-pdf" style="display:none;">
+        <div class="field">
+          <label class="field-label">上传研报 PDF</label>
+          <div class="field-hint">系统将自动提取研报中的因子公式并生成代码</div>
+          <div class="file-drop" id="pdfDrop" onclick="document.getElementById('pdfFile').click()">
+            点击或拖拽 PDF 文件到此处
+          </div>
+          <input type="file" id="pdfFile" accept=".pdf" multiple style="display:none" onchange="handleFileSelect(this, 'pdfDrop')">
+          <div class="file-list" id="pdfList"></div>
+        </div>
+      </div>
+
+      <!-- Method: Optimize -->
+      <div class="method-content" id="method-optimize" style="display:none;">
+        <div class="field">
+          <label class="field-label">优化目标</label>
+          <div class="field-hint">描述你希望优化的方向</div>
+          <textarea class="field-input" id="optDesc" placeholder="例如：优化现有动量因子，提高 ICIR 和稳定性..."></textarea>
+        </div>
+        <div class="field">
+          <label class="field-label">现有因子代码（可选）</label>
+          <div class="field-hint">上传 .py 文件或直接粘贴代码</div>
+          <div class="file-drop" id="codeDrop" onclick="document.getElementById('codeFile').click()">
+            点击上传因子代码文件（可选）
+          </div>
+          <input type="file" id="codeFile" accept=".py" style="display:none" onchange="handleFileSelect(this, 'codeDrop')">
+          <div class="file-list" id="codeList"></div>
+        </div>
+      </div>
+
+      <!-- Method: Image -->
+      <div class="method-content" id="method-image" style="display:none;">
+        <div class="field">
+          <label class="field-label">上传 K 线图 / 技术分析图</label>
+          <div class="field-hint">AI 将识别图形特征（形态、指标）并生成对应因子</div>
+          <div class="file-drop" id="imageDrop" onclick="document.getElementById('imageFile').click()">
+            点击或拖拽图片到此处（PNG / JPG）
+          </div>
+          <input type="file" id="imageFile" accept=".png,.jpg,.jpeg,.webp" style="display:none" onchange="handleFileSelect(this, 'imageDrop')">
+          <div class="file-list" id="imageList"></div>
+          <div style="margin-top:8px; padding:8px 12px; background:var(--warning-soft); border-radius:6px; font-size:12px; color:var(--warning);">
+            此功能需要多模态 LLM 支持，即将上线
+          </div>
+        </div>
+      </div>
+
+      <!-- Method: Trade -->
+      <div class="method-content" id="method-trade" style="display:none;">
+        <div class="field">
+          <label class="field-label">上传交割单</label>
+          <div class="field-hint">系统将分析交易风格和弱点，生成针对性优化因子</div>
+          <div class="file-drop" id="tradeDrop" onclick="document.getElementById('tradeFile').click()">
+            点击或拖拽文件（CSV / Excel）
+          </div>
+          <input type="file" id="tradeFile" accept=".csv,.xlsx,.xls" style="display:none" onchange="handleFileSelect(this, 'tradeDrop')">
+          <div class="file-list" id="tradeList"></div>
+          <div style="margin-top:8px; padding:8px 12px; background:var(--warning-soft); border-radius:6px; font-size:12px; color:var(--warning);">
+            交割单分析功能即将上线
+          </div>
+        </div>
+      </div>
+
+      <!-- Common fields -->
+      <div class="field" style="margin-top:20px; border-top:1px solid var(--line); padding-top:16px;">
+        <label class="field-label">循环次数</label>
+        <select class="field-input" id="loopCount" style="width:120px;">
+          <option value="1">1 轮</option>
+          <option value="3">3 轮</option>
+          <option value="5">5 轮</option>
+          <option value="10">10 轮</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" id="startBtn" onclick="submitTask()">启动任务</button>
+    </div>
+  </div>
+</div>
+
+<script src="socket.io.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
