@@ -1,0 +1,16 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Runtime data (not frontend code)
+*.jpg
+!App logo.jpg
+*.png
+*.log
+node_modules/
